@@ -1,0 +1,266 @@
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- Create the window
+local Window = Rayfield:CreateWindow({
+	Name = "Lucky Block",
+	LoadingTitle = "sla usei o Rayfield mesmo.",
+	ConfigurationSaving = { Enabled = false },
+	Discord = { Enabled = false },
+	KeySystem = false,
+	Theme = {
+		Accent = Color3.fromRGB(170, 0, 255)
+	}
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+local SpawnTab = Window:CreateTab("Spawn", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+local SilentAimTab = Window:CreateTab("Silent Aim", 4483362458)
+
+-- FireRocket Remote Getter
+local function getFireRocketRemote()
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	local character = LocalPlayer.Character
+
+	for _, container in {character, backpack} do
+		if container then
+			local tool = container:FindFirstChild("RocketJumper") or container:FindFirstChild("JumpLauncher")
+			if tool then
+				local remote = tool:FindFirstChild("FireRocket")
+				if remote then
+					return remote
+				end
+			end
+		end
+	end
+
+	if backpack then
+		local tool = backpack:FindFirstChild("RocketJumper") or backpack:FindFirstChild("JumpLauncher")
+		if tool and character then
+			local clone = tool:Clone()
+			clone.Parent = character
+			local remote = clone:FindFirstChild("FireRocket")
+			if remote then
+				return remote
+			end
+		end
+	end
+
+	return nil
+end
+
+-- Fire At
+local function fireAt(target, usePrediction)
+	local char = target.Character
+	if not char then return end
+
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or hrp
+	local legs = char:FindFirstChild("LowerTorso") or char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftLowerLeg") or hrp
+	if not hrp or not torso or not legs then return end
+
+	local predictionTime = 0.15
+	local velocity = hrp.Velocity
+	local predictedPos = usePrediction and (hrp.Position + velocity * predictionTime) or hrp.Position
+
+	local mode = math.random(1, 2)
+	local targetPos = (mode == 1 and torso.Position or (legs.Position - Vector3.new(0, 2, 0)))
+	local origin = targetPos + Vector3.new(0, 40, 0)
+
+	local remote = getFireRocketRemote()
+	if remote then
+		remote:FireServer(origin, targetPos)
+	end
+end
+
+-- Closest Matching Player
+local function getClosestMatchingPlayer(partialName)
+	partialName = partialName:lower()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			local name = p.Name:lower()
+			if name:sub(1, #partialName) == partialName or name:find(partialName, 1, true) then
+				return p
+			end
+		end
+	end
+	return nil
+end
+
+-- Main Loop
+local targetInputName = ""
+local loopTargetOnly = false
+local loopAllPlayers = false
+local fireRate = 0.0
+local viewTarget = false
+
+task.spawn(function()
+	while true do
+		if loopAllPlayers then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer then
+					fireAt(player, true)
+				end
+			end
+			task.wait(fireRate)
+		elseif loopTargetOnly then
+			local match = getClosestMatchingPlayer(targetInputName)
+			if match then
+				fireAt(match, true)
+			end
+			task.wait(fireRate)
+		else
+			task.wait(0.1)
+		end
+	end
+end)
+
+-- Camera View
+RunService.RenderStepped:Connect(function()
+	if viewTarget and targetInputName ~= "" then
+		local target = getClosestMatchingPlayer(targetInputName)
+		if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+			Camera.CameraSubject = target.Character:FindFirstChild("Humanoid")
+		end
+	end
+end)
+
+-- GUI Elements - Main
+MainTab:CreateInput({
+	Name = "Target Player (Partial Name)",
+	PlaceholderText = "Type part of player's name",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(text)
+		targetInputName = text
+	end
+})
+
+MainTab:CreateToggle({
+	Name = "View Player (Spectator Mode)",
+	CurrentValue = false,
+	Flag = "ViewPlayerToggle",
+	Callback = function(state)
+		viewTarget = state
+		if not state then
+			Camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+		end
+	end
+})
+
+MainTab:CreateToggle({
+	Name = "Loop Explode Target",
+	CurrentValue = false,
+	Flag = "LoopExplodeTarget",
+	Callback = function(state)
+		loopTargetOnly = state
+	end
+})
+
+MainTab:CreateToggle({
+	Name = "Loop Explode All Players",
+	CurrentValue = false,
+	Flag = "LoopExplodeAll",
+	Callback = function(state)
+		loopAllPlayers = state
+	end
+})
+
+MainTab:CreateSlider({
+	Name = "Fire Rate (Loop)",
+	Range = {0.0, 1.0},
+	Increment = 0.05,
+	Suffix = "s",
+	CurrentValue = 0.0,
+	Flag = "FireRateSlider",
+	Callback = function(value)
+		fireRate = value
+	end
+})
+
+-- Spawn Tab
+local spawnToggles = {
+	["Spawn Lucky Block"] = "SpawnLuckyBlock",
+	["Spawn Super Block"] = "SpawnSuperBlock",
+	["Spawn Diamond Block"] = "SpawnDiamondBlock",
+	["Spawn Rainbow Block"] = "SpawnRainbowBlock",
+	["Spawn Galaxy Block"] = "SpawnGalaxyBlock"
+}
+
+for label, remoteName in pairs(spawnToggles) do
+	local active = false
+	SpawnTab:CreateToggle({
+		Name = label,
+		CurrentValue = false,
+		Callback = function(state)
+			active = state
+			if active then
+				task.spawn(function()
+					while active do
+						pcall(function()
+							ReplicatedStorage:WaitForChild(remoteName):FireServer()
+						end)
+						task.wait()
+					end
+				end)
+			end
+		end
+	})
+end
+
+-- Misc Tab
+MiscTab:CreateButton({
+	Name = "Load Infinite Yield",
+	Callback = function()
+		loadstring(game:HttpGet("https://rawscripts.net/raw/Infinite-Yield_500"))()
+	end
+})
+
+MiscTab:CreateButton({
+	Name = "Load Nameless Admin",
+	Callback = function()
+		loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Nameless-admin-script-35641"))()
+	end
+})
+
+-- Auto Stop Rockets
+local autoStop = false
+MiscTab:CreateToggle({
+	Name = "Auto Stop Rockets",
+	CurrentValue = false,
+	Flag = "AutoStopRockets",
+	Callback = function(state)
+		autoStop = state
+	end
+})
+
+RunService.Heartbeat:Connect(function()
+	if autoStop then
+		for _, part in ipairs(Workspace:GetDescendants()) do
+			if part:IsA("BasePart") and part.Name:lower():find("rocket") and part.Velocity.Magnitude > 1 then
+				part:Destroy()
+			end
+		end
+	end
+end)
+
+-- Silent Aim Tab (just FOV RGB effect now)
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = true
+fovCircle.Radius = 120
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+task.spawn(function()
+	while true do
+		local t = tick()
+		fovCircle.Color = Color3.fromHSV((t * 0.25) % 1, 1, 1)
+		task.wait()
+	end
+end)
