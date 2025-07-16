@@ -1,0 +1,2 @@
+# LBB
+primeiro loadstring
